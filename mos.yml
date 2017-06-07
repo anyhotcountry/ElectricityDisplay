@@ -1,0 +1,24 @@
+name: electricity_dashboard
+arch: esp8266
+version: 1.0
+skeleton_version: 2017-05-18
+modules:
+  - origin: https://github.com/cesanta/arduino-drivers
+sources:
+  - src
+  - ${arduino_drivers_path}/Arduino
+  - ${arduino_drivers_path}/Adafruit_SSD1306
+  - ${arduino_drivers_path}/Adafruit-GFX-Library
+filesystem:
+  - fs
+config_schema:
+  - ["mqtt.sub", "s", "$aws/things/Electricity/shadow/update", {title: "Subscribe topic"}]
+libs:
+  - origin: https://github.com/mongoose-os-libs/rpc-mqtt
+  - origin: https://github.com/mongoose-os-libs/rpc-service-config
+  - origin: https://github.com/mongoose-os-libs/rpc-service-fs
+  - origin: https://github.com/mongoose-os-libs/rpc-service-i2c
+  - origin: https://github.com/mongoose-os-libs/updater-rpc
+build_vars:
+  SSL: mbedTLS
+  MGOS_ENABLE_ARDUINO_API: 1
