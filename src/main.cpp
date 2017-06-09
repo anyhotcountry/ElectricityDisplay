@@ -12,12 +12,14 @@
 #include <Arduino.h>
 #include <Adafruit_SSD1306.h>
 
+#define BUCKETS 20
+
 Adafruit_SSD1306 *d1 = nullptr;
 static int min = 0;
 static int day = -1;
 static uint16_t dayTotal = 0;
 static ulong durationTotal = 0;
-static ulong buckets[20];
+static ulong buckets[BUCKETS];
 
 static void sub(struct mg_connection *c, const char *fmt, ...)
 {
@@ -41,7 +43,7 @@ static void show_watts(Adafruit_SSD1306 *d, const int watts, int pulses, int dur
     min = watts;
     dayTotal = 0;
     durationTotal = 0;
-    for (int i = 0; i < 20; i++)
+    for (int i = 0; i < BUCKETS; i++)
     {
       buckets[i] = 0;
     }
@@ -49,11 +51,11 @@ static void show_watts(Adafruit_SSD1306 *d, const int watts, int pulses, int dur
 
   min = watts < min ? watts : min;
   int bucket = watts / 100.0;
-  bucket = bucket >= 20 ? 19 : bucket;
+  bucket = bucket >= BUCKETS ? BUCKETS - 1 : bucket;
   buckets[bucket] += pulses;
   dayTotal += pulses;
   durationTotal += duration;
-  uint16_t average = (uint16_t)(dayTotal * 3600000ul / durationTotal);
+  double average = dayTotal * 3600000.0 / durationTotal;
   double cost = 0.15e-3 * average * 24;
   uint8_t textSize = watts < 1000 ? 3 : 2;
   d->clearDisplay();
@@ -66,25 +68,30 @@ static void show_watts(Adafruit_SSD1306 *d, const int watts, int pulses, int dur
   d->setCursor(0, 35);
   d->printf("Min: %d\n", min);
   d->printf("Tot: %d\n", dayTotal);
-  d->printf("Avg: %d\n", average);
+  d->printf("Avg: %.0f\n", average);
   d->printf("Cost: %0.2f\n", cost);
   d->printf("RX: %02d:%02d\n", tm.tm_hour, tm.tm_min);
 
   // Draw histogram
-  int height = d->height() - d->getCursorY();
-  for (int i = 0; i < 20; i++)
+  int height = d->height() - d->getCursorY() - 5;
+  ulong max = buckets[0];
+  for (int i = 1; i < BUCKETS; i++)
   {
-    int barHeight = height * buckets[i] / dayTotal;
+    max = buckets[i] > max ? buckets[i] : max;
+  }
+
+  for (int i = 0; i < BUCKETS; i++)
+  {
+    int barHeight = height * buckets[i] / max;
     d->drawRect(i * 3, 128 - barHeight, 3, barHeight, WHITE);
   }
 
   d->display();
 }
 
-static void show_text(Adafruit_SSD1306 *d, int x, int y, int size, const char *text)
+static void show_text(Adafruit_SSD1306 *d, int size, const char *text)
 {
   d->setTextSize(size);
-  d->setCursor(x, y);
   d->printf(text);
   d->display();
 }
@@ -97,6 +104,7 @@ static void ev_handler(struct mg_connection *c, int ev, void *p,
   if (ev == MG_EV_MQTT_CONNACK)
   {
     LOG(LL_INFO, ("CONNACK: %d", msg->connack_ret_code));
+    show_text(d1, 0, "Connected");
     if (get_cfg()->mqtt.sub == NULL)
     {
       LOG(LL_ERROR, ("Run 'mgos config-set mqtt.sub=...'"));
@@ -108,6 +116,7 @@ static void ev_handler(struct mg_connection *c, int ev, void *p,
   }
   else if (ev == MG_EV_MQTT_SUBACK)
   {
+    show_text(d1, 0, "Subscribed");
     LOG(LL_INFO, ("Subscription %u acknowledged", msg->message_id));
   }
   else if (ev == MG_EV_MQTT_PUBLISH)
@@ -141,7 +150,8 @@ void setup(void)
     d1->setRotation(1);
     d1->clearDisplay();
     d1->setTextColor(WHITE);
-    show_text(d1, 0, d1->height() / 4, 1, "Connecting");
+    d1->setCursor(1, 1);
+    show_text(d1, 0, "Connecting");
   }
 
   mgos_mqtt_add_global_handler(ev_handler, NULL);
